@@ -24,7 +24,7 @@ NSP (x86) -> compatibility DLL (x86) -> Win32 COM API
 
 ## Safety
 
-#### !! It is unclear if using this driver will void your warranty, caution is advised !!
+### !! It is unclear if using this driver will void your warranty, caution is advised !!
 
 ECU communication is safety-critical. Begin with connection and map-read tests.
 Keep ECU power and USB stable during transfers. I do not recommend using this driver to do a firmware update. Keep as upported x64 system available.
