@@ -1,0 +1,16 @@
+# Visual Studio and MSVC intermediates
+.vs/
+*.obj
+*.pdb
+*.ilk
+
+# Locally generated binaries and linker artifacts
+*.dll
+*.exe
+*.lib
+*.exp
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.bak
