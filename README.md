@@ -13,8 +13,6 @@ NSP (x86) -> compatibility DLL (x86) -> Win32 COM API
           -> Microsoft/FTDI ARM64 VCP driver -> Elite ECU
 ```
 
-No Haltech binaries, maps, firmware, decompiled source, or FTDI redistributable
-files are included in this repository.
 
 ## Status
 
@@ -23,15 +21,13 @@ files are included in this repository.
 - USB device: FTDI FT232H, VID `0403`, PID `6014`
 - Software used during development: Haltech NSP 1.48.4
 - This project is unofficial and is not affiliated with Haltech or FTDI.
-- The direct transport requires further hardware validation before firmware
-  updates or safety-critical tuning work.
 
 ## Safety
 
+#### !! It is unclear if using this driver will void your warranty, caution is advised !!
+
 ECU communication is safety-critical. Begin with connection and map-read tests.
-Keep ECU power and USB stable during transfers. Do not use this project for a
-firmware update until the transport has been independently validated. Keep a
-supported x64 recovery environment available.
+Keep ECU power and USB stable during transfers. I do not recommend using this driver to do a firmware update. Keep as upported x64 system available.
 
 ## Requirements
 
@@ -80,7 +76,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
 The script removes this DLL and restores the application-local backup, if one
 was created.
 
-## Implemented D2XX surface
+## Implemented FTDI D2XX modules
 
 - Device enumeration and identity
 - Open by index or serial number
