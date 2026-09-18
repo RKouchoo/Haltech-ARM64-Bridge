@@ -1,0 +1,23 @@
+LIBRARY ftd2xx
+EXPORTS
+ FT_CreateDeviceInfoList
+ FT_GetDeviceInfoDetail
+ FT_Open
+ FT_OpenEx
+ FT_Close
+ FT_Read
+ FT_Write
+ FT_GetQueueStatus
+ FT_GetStatus
+ FT_Purge
+ FT_SetBaudRate
+ FT_SetDataCharacteristics
+ FT_SetFlowControl
+ FT_SetTimeouts
+ FT_SetBitMode
+ FT_SetLatencyTimer
+ FT_SetUSBParameters
+ FT_ResetDevice
+ FT_GetLibraryVersion
+ FT_GetDriverVersion
+
