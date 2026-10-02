@@ -4,7 +4,9 @@ $folder = 'C:\Program Files (x86)\Haltech\Nexus Software\Haltech NSP'
 $target = Join-Path $folder 'ftd2xx.dll'
 $backup = Join-Path $folder 'ftd2xx.pre-arm64-bridge.dll'
 
-Get-Process -Name NSP,haltech-ftdi-arm64,haltech-ftdi-arm64-v2,haltech-ftdi-arm64-v3 -ErrorAction SilentlyContinue | Stop-Process -Force
+if (Get-Process -Name NSP,haltech-ftdi-arm64,haltech-ftdi-arm64-v2,haltech-ftdi-arm64-v3 -ErrorAction SilentlyContinue) {
+    throw 'Close NSP and bridge helpers before uninstalling.'
+}
 if (Test-Path -LiteralPath $target) {
     Remove-Item -LiteralPath $target -Force
 }

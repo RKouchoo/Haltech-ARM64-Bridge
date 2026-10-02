@@ -1,4 +1,4 @@
-LIBRARY ftd2xx
+LIBRARY fake-ftd2xx
 EXPORTS
  FT_CreateDeviceInfoList
  FT_GetDeviceInfoDetail
@@ -24,4 +24,3 @@ EXPORTS
  FT_GetLatencyTimer
  FT_GetBitMode
  FT_SetChars
-

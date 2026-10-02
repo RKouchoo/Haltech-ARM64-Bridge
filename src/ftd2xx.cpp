@@ -1,8 +1,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <windows.h>
+#include "diagnostics.h"
 
-// Minimal D2XX compatibility layer for Haltech NSP on Windows ARM64.
+// Legacy VCP compatibility implementation, retained for regression tests.
+// Production builds now use native_bridge.cpp and native_helper.cpp.
 //
 // NSP is an x86 process and cannot load FTDI's ARM64 D2XX DLL. This library
 // exposes the x86 D2XX entry points used by NSP and implements them with the
@@ -88,16 +90,25 @@ static FT_STATUS configure()
     d.Parity = NOPARITY;
     d.StopBits = ONESTOPBIT;
     d.fBinary = TRUE;
+    // A previous COM-port user may have enabled filtering or DSR gating.
+    // ECU replies are binary: every byte (including 0x00) must survive.
+    d.fParity = FALSE;
+    d.fNull = FALSE;
+    d.fErrorChar = FALSE;
+    d.fDsrSensitivity = FALSE;
+    d.fOutxDsrFlow = FALSE;
+    d.fAbortOnError = FALSE;
     d.fOutxCtsFlow = TRUE;
     d.fRtsControl = RTS_CONTROL_HANDSHAKE;
     d.fOutX = d.fInX = FALSE;
     if (!SetCommState(g_port, &d))
         return FT_IO_ERROR;
-    COMMTIMEOUTS t = {MAXDWORD, 0, 0, 0, kDefaultWriteTimeoutMs};
+    // D2XX timeout 0 means wait for the requested byte count, not a poll.
+    // MAXDWORD/0/0 would make an empty read return immediately instead.
+    COMMTIMEOUTS t = {0, 0, 0, 0, kDefaultWriteTimeoutMs};
     if (!SetCommTimeouts(g_port, &t))
         return FT_IO_ERROR;
-    SetupComm(g_port, kUsbBufferSize, kUsbBufferSize);
-    return FT_OK;
+    return SetupComm(g_port, kUsbBufferSize, kUsbBufferSize) ? FT_OK : FT_IO_ERROR;
 }
 
 // D2XX exports consumed by Haltech's managed FTDI wrapper.
@@ -169,8 +180,26 @@ EXP FT_Open(int i, PVOID *h)
         return s;
     }
     *h = (PVOID)g_port;
+    diagnostics::open();
+    diagnostics::record("open", 0, 0, FT_OK, 0, 0);
     leave();
     return FT_OK;
+}
+EXP FT_GetDeviceInfo(PVOID h, LPDWORD type, LPDWORD id, LPVOID serialNumber,
+                    LPVOID description, LPVOID)
+{
+    // The managed FTDI wrapper queries this before setting latency/bit mode.
+    // Enumeration alone is not enough to implement GetDeviceType().
+    enter();
+    if (!valid(h))
+    {
+        leave();
+        return FT_INVALID_HANDLE;
+    }
+    FT_STATUS status = FT_GetDeviceInfoDetail(0, nullptr, type, id, nullptr,
+                                             serialNumber, description, nullptr);
+    leave();
+    return status;
 }
 EXP FT_OpenEx(PVOID arg, DWORD flags, PVOID *h)
 {
@@ -190,6 +219,8 @@ EXP FT_Close(PVOID h)
     }
     CloseHandle(g_port);
     g_port = INVALID_HANDLE_VALUE;
+    diagnostics::record("close", 0, 0, FT_OK, 0, 0);
+    diagnostics::close();
     leave();
     return FT_OK;
 }
@@ -198,13 +229,20 @@ EXP FT_Read(PVOID h, LPVOID b, DWORD n, LPDWORD got)
     if (!got)
         return FT_INVALID_PARAMETER;
     *got = 0;
+    if (!b && n)
+        return FT_INVALID_PARAMETER;
     enter();
     if (!valid(h))
     {
         leave();
         return FT_INVALID_HANDLE;
     }
-    BOOL ok = ReadFile(g_port, b, n, got, 0);
+    LONGLONG started = diagnostics::start();
+    // Windows waits for n bytes or the configured *total* timeout. Do not
+    // retry a short timed-out read: that would restart NSP's deadline.
+    BOOL ok = n == 0 || ReadFile(g_port, b, n, got, 0);
+    DWORD error = ok ? 0 : GetLastError();
+    diagnostics::record("read", n, *got, ok ? FT_OK : FT_IO_ERROR, error, started);
     leave();
     return ok ? FT_OK : FT_IO_ERROR;
 }
@@ -213,13 +251,18 @@ EXP FT_Write(PVOID h, LPVOID b, DWORD n, LPDWORD put)
     if (!put)
         return FT_INVALID_PARAMETER;
     *put = 0;
+    if (!b && n)
+        return FT_INVALID_PARAMETER;
     enter();
     if (!valid(h))
     {
         leave();
         return FT_INVALID_HANDLE;
     }
-    BOOL ok = WriteFile(g_port, b, n, put, 0);
+    LONGLONG started = diagnostics::start();
+    BOOL ok = n == 0 || WriteFile(g_port, b, n, put, 0);
+    DWORD error = ok ? 0 : GetLastError();
+    diagnostics::record("write", n, *put, ok ? FT_OK : FT_IO_ERROR, error, started);
     leave();
     return ok ? FT_OK : FT_IO_ERROR;
 }
@@ -235,7 +278,13 @@ EXP FT_GetQueueStatus(PVOID h, LPDWORD n)
     }
     DWORD e = 0;
     COMSTAT s = {};
+    LONGLONG started = diagnostics::start();
     BOOL ok = ClearCommError(g_port, &e, &s);
+    DWORD error = ok ? 0 : GetLastError();
+    diagnostics::queuePoll(started);
+    if (!ok || e)
+        diagnostics::record("queue-error", 0, s.cbInQue, ok ? FT_OK : FT_IO_ERROR,
+                            error, started, e);
     *n = s.cbInQue;
     leave();
     return ok ? FT_OK : FT_IO_ERROR;
@@ -250,7 +299,13 @@ EXP FT_GetStatus(PVOID h, LPDWORD rx, LPDWORD tx, LPDWORD ev)
     }
     DWORD e = 0;
     COMSTAT s = {};
+    LONGLONG started = diagnostics::start();
     BOOL ok = ClearCommError(g_port, &e, &s);
+    DWORD error = ok ? 0 : GetLastError();
+    diagnostics::queuePoll(started);
+    if (!ok || e)
+        diagnostics::record("status-error", 0, s.cbInQue, ok ? FT_OK : FT_IO_ERROR,
+                            error, started, e);
     if (rx)
         *rx = s.cbInQue;
     if (tx)
@@ -274,6 +329,8 @@ EXP FT_Purge(PVOID h, DWORD mask)
     if (mask & 2)
         f |= PURGE_TXABORT | PURGE_TXCLEAR;
     BOOL ok = PurgeComm(g_port, f);
+    DWORD error = ok ? 0 : GetLastError();
+    diagnostics::record("purge", mask, 0, ok ? FT_OK : FT_IO_ERROR, error, 0);
     leave();
     return ok ? FT_OK : FT_IO_ERROR;
 }
@@ -312,6 +369,7 @@ EXP FT_SetDataCharacteristics(PVOID h, UCHAR bits, UCHAR stop, UCHAR parity)
         d.ByteSize = bits;
         d.StopBits = (stop == 2 ? TWOSTOPBITS : ONESTOPBIT);
         d.Parity = (BYTE)parity;
+        d.fParity = parity != NOPARITY;
         ok = SetCommState(g_port, &d);
     }
     leave();
@@ -346,8 +404,20 @@ EXP FT_SetTimeouts(PVOID h, DWORD r, DWORD w)
         leave();
         return FT_INVALID_HANDLE;
     }
-    COMMTIMEOUTS t = {MAXDWORD, 0, r, 0, w};
+    // Match FT_Read: complete at the requested byte count or at one total
+    // deadline. No inter-byte timeout, per-byte delay, or first-byte mode.
+    // Both total fields zero means no timeout, as in D2XX.
+    // https://ftdichip.com/Support/Knowledgebase/ft_read.htm
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-commtimeouts
+    COMMTIMEOUTS t = {0, 0, r, 0, w};
     BOOL ok = SetCommTimeouts(g_port, &t);
+    DWORD error = ok ? 0 : GetLastError();
+    if (ok)
+    {
+        diagnostics::readTimeoutMs = r;
+        diagnostics::writeTimeoutMs = w;
+    }
+    diagnostics::record("timeouts", r, w, ok ? FT_OK : FT_IO_ERROR, error, 0);
     leave();
     return ok ? FT_OK : FT_IO_ERROR;
 }
@@ -361,17 +431,29 @@ EXP FT_SetLatencyTimer(PVOID h, UCHAR)
 }
 EXP FT_SetUSBParameters(PVOID h, DWORD in, DWORD out)
 {
+    enter();
     if (!valid(h))
+    {
+        leave();
         return FT_INVALID_HANDLE;
-    SetupComm(g_port, in, out);
-    return FT_OK;
+    }
+    // SetupComm sizes the VCP queues, not FTDI USB transfer requests. Do not
+    // report success when even the available VCP buffer operation failed.
+    BOOL ok = SetupComm(g_port, in, out);
+    leave();
+    return ok ? FT_OK : FT_IO_ERROR;
 }
 EXP FT_ResetDevice(PVOID h)
 {
+    enter();
     if (!valid(h))
+    {
+        leave();
         return FT_INVALID_HANDLE;
-    PurgeComm(g_port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
-    return FT_OK;
+    }
+    BOOL ok = PurgeComm(g_port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+    leave();
+    return ok ? FT_OK : FT_IO_ERROR;
 }
 EXP FT_GetLibraryVersion(LPDWORD v)
 {
@@ -389,7 +471,13 @@ EXP FT_GetDriverVersion(PVOID h, LPDWORD v)
 }
 BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID)
 {
-    if (reason == DLL_PROCESS_DETACH && g_port != INVALID_HANDLE_VALUE)
-        CloseHandle(g_port);
+    if (reason == DLL_PROCESS_DETACH)
+    {
+        // Only kernel file operations here; do not acquire g_portLock during
+        // process teardown, when its owning thread may no longer exist.
+        diagnostics::close();
+        if (g_port != INVALID_HANDLE_VALUE)
+            CloseHandle(g_port);
+    }
     return TRUE;
 }
