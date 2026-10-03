@@ -13,5 +13,8 @@ if errorlevel 1 exit /b %errorlevel%
 rem Build with build.cmd first: test the actual distributable as well as source.
 "%~dp0..\build\tests\exports_test.exe" "%~dp0..\dist\ftd2xx.dll"
 if errorlevel 1 exit /b %errorlevel%
-call "%~dp0native.cmd"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer_tests.ps1"
+if errorlevel 1 exit /b %errorlevel%
+rem The native-helper experiment has its own explicit tests/native.cmd suite.
+rem Default tests verify only the production VCP transport and distributable.
 exit /b %errorlevel%

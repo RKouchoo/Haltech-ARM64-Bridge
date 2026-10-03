@@ -2,7 +2,11 @@
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $folder = 'C:\Program Files (x86)\Haltech\Nexus Software\Haltech NSP'
-$components = @('haltech-ftdi-arm64.exe', 'ftd2xx.dll')
+$components = @('ftd2xx.dll')
+# Retire only the experimental app-local helper, after preserving it alongside
+# the old DLL. Restoring that snapshot must still recover the matched pair.
+$retiredComponents = @('haltech-ftdi-arm64.exe')
+$snapshotComponents = $components + $retiredComponents
 
 if (-not (Test-Path -LiteralPath (Join-Path $folder 'NSP.exe'))) {
     throw "NSP was not found at $folder"
@@ -29,15 +33,15 @@ function Get-PeMachine([string]$Path) {
     }
 }
 
-$expectedMachine = @{ 'ftd2xx.dll' = 0x14c; 'haltech-ftdi-arm64.exe' = 0xaa64 }
+$expectedMachine = @{ 'ftd2xx.dll' = 0x14c }
 foreach ($name in $components) {
     $source = Join-Path $repo ("dist\" + $name)
     if (-not (Test-Path -LiteralPath $source)) { throw "Run build.cmd first: missing $source" }
     if ((Get-PeMachine $source) -ne $expectedMachine[$name]) { throw "Wrong CPU architecture: $source" }
 }
-$nativeDriver = Join-Path $env:WINDIR 'System32\ftd2xx.dll'
+$nativeDriver = Join-Path $env:WINDIR 'System32\drivers\ftser2k.sys'
 if (-not (Test-Path -LiteralPath $nativeDriver) -or (Get-PeMachine $nativeDriver) -ne 0xaa64) {
-    throw 'The ARM64 FTDI D2XX driver must be installed in Windows System32 first.'
+    throw 'Install the ARM64 FTDI VCP (virtual COM port) driver first.'
 }
 
 # Preserve the original uninstall checkpoint, plus a separate full snapshot
@@ -51,7 +55,7 @@ $backupRoot = Join-Path $folder 'bridge-backups'
 $backupFolder = Join-Path $backupRoot ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $backupFolder -Force | Out-Null
 $existed = @{}
-foreach ($name in $components) {
+foreach ($name in $snapshotComponents) {
     $target = Join-Path $folder $name
     $existed[$name] = Test-Path -LiteralPath $target
     if ($existed[$name]) { Copy-Item -LiteralPath $target -Destination (Join-Path $backupFolder $name) }
@@ -69,6 +73,13 @@ try {
             throw "Verification failed for $name"
         }
     }
+    foreach ($name in $retiredComponents) {
+        if ($existed[$name]) {
+            $installed += $name
+            # Exact backed-up application file only; no driver files are removed.
+            Remove-Item -LiteralPath (Join-Path $folder $name) -Force
+        }
+    }
 } catch {
     $installError = $_
     foreach ($name in $installed) {
@@ -82,8 +93,11 @@ try {
     }
     throw $installError
 }
-# Native D2XX applies NSP's settings on the open handle. No COM-port registry
-# edits, device resets, or Windows reboot are needed for this installation.
-Write-Host "Installed native ARM64 D2XX bridge. Backup: $backupFolder"
+# Keep the existing VCP configuration, including its latency setting. Switching
+# the application bridge does not reinstall/reset the driver or change the ECU.
+Write-Host "Installed VCP-based ARM64 bridge. Backup: $backupFolder"
+if ($existed['haltech-ftdi-arm64.exe']) {
+    Write-Host 'Removed the unused native helper; it is recoverable from this backup.'
+}
 Write-Host 'Reopen NSP to use it. Windows does not need to restart.'
 

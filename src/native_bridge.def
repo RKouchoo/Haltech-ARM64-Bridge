@@ -21,4 +21,6 @@ EXPORTS
  FT_ResetDevice
  FT_GetLibraryVersion
  FT_GetDriverVersion
-
+ FT_GetLatencyTimer
+ FT_GetBitMode
+ FT_SetChars

@@ -10,9 +10,8 @@
 *.lib
 *.exp
 
-# Ship the matched x86 shim and ARM64 helper; no vendor drivers are bundled.
+# Ship only the tested VCP shim; experimental helpers and vendor drivers stay out.
 !/dist/ftd2xx.dll
-!/dist/haltech-ftdi-arm64.exe
 
 # Local logs and temporary files
 *.log

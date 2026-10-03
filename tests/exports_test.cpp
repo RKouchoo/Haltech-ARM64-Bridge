@@ -34,10 +34,7 @@ int wmain(int argc, wchar_t **argv)
                               "FT_SetUSBParameters",
                               "FT_ResetDevice",
                               "FT_GetLibraryVersion",
-                              "FT_GetDriverVersion",
-                              "FT_GetLatencyTimer",
-                              "FT_GetBitMode",
-                              "FT_SetChars"};
+                              "FT_GetDriverVersion"};
     int failures = 0;
     for (const char *name : required)
     {
@@ -46,6 +43,19 @@ int wmain(int argc, wchar_t **argv)
             printf("Missing export: %s\n", name);
             ++failures;
         }
+    }
+    // The experimental native bridge shares these exports. Check the VCP
+    // version too, so accidentally shipping it cannot pass the release test.
+    using GetVersion = DWORD(WINAPI *)(LPDWORD);
+    FARPROC address = GetProcAddress(library, "FT_GetLibraryVersion");
+    GetVersion getVersion = nullptr;
+    static_assert(sizeof(getVersion) == sizeof(address), "Function pointer size");
+    memcpy(&getVersion, &address, sizeof(address));
+    DWORD version = 0;
+    if (!getVersion || getVersion(&version) != 0 || version != 0x00040000)
+    {
+        printf("Expected production VCP bridge version 0x00040000, got 0x%08lx\n", version);
+        ++failures;
     }
     FreeLibrary(library);
     printf("%zu DLL exports checked, %d failures (no hardware opened)\n", ARRAYSIZE(required),

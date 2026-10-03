@@ -1,5 +1,7 @@
 @echo off
 setlocal
+rem Experimental native-helper tests only. Never build into or load dist here:
+rem the release DLL is the hardware-verified VCP bridge, not this transport.
 set "VSROOT=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
 set "TESTDIR=%~dp0..\build\tests\native"
 if not exist "%TESTDIR%" mkdir "%TESTDIR%"
@@ -11,7 +13,7 @@ cl /nologo /EHsc /std:c++17 /MT /O2 /W4 /WX /DBRIDGE_TEST_BACKEND "%~dp0..\src\n
 if errorlevel 1 exit /b %errorlevel%
 call "%VSROOT%\VC\Auxiliary\Build\vcvarsall.bat" x86
 if errorlevel 1 exit /b %errorlevel%
-cl /nologo /EHsc /std:c++17 /MT /O2 /W4 /WX /LD "%~dp0..\src\native_bridge.cpp" /Fo:"%TESTDIR%\\" /link /DEF:"%~dp0..\src\ftd2xx.def" /OUT:"%TESTDIR%\ftd2xx.dll" /IMPLIB:"%TESTDIR%\ftd2xx.lib"
+cl /nologo /EHsc /std:c++17 /MT /O2 /W4 /WX /LD "%~dp0..\src\native_bridge.cpp" /Fo:"%TESTDIR%\\" /link /DEF:"%~dp0..\src\native_bridge.def" /OUT:"%TESTDIR%\ftd2xx.dll" /IMPLIB:"%TESTDIR%\ftd2xx.lib"
 if errorlevel 1 exit /b %errorlevel%
 cl /nologo /EHsc /std:c++17 /MT /O2 /W4 /WX "%~dp0native_integration.cpp" /Fo:"%TESTDIR%\\" /Fe:"%TESTDIR%\native_integration.exe"
 if errorlevel 1 exit /b %errorlevel%
@@ -26,5 +28,4 @@ copy /y "%TESTDIR%\haltech-ftdi-arm64.exe" "%TESTDIR%\missing-backend\haltech-ft
 if errorlevel 1 exit /b %errorlevel%
 "%TESTDIR%\native_integration.exe" "%TESTDIR%\missing-backend\ftd2xx.dll" --expect-startup-failure
 if errorlevel 1 exit /b %errorlevel%
-"%TESTDIR%\native_integration.exe" "%~dp0..\dist\ftd2xx.dll" --smoke
 exit /b %errorlevel%
