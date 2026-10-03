@@ -5,8 +5,6 @@
 
 // Production VCP compatibility implementation. Connection, live polling and
 // log downloads were verified with an Elite 2500 on Windows ARM64 in Parallels.
-// The native-helper experiment failed the hardware handshake; keep it out of
-// the default build until that regression has been resolved and tested.
 //
 // NSP is an x86 process and cannot load FTDI's ARM64 D2XX DLL. This library
 // exposes the x86 D2XX entry points used by NSP and implements them with the

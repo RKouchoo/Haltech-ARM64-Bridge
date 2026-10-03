@@ -10,7 +10,7 @@
 *.lib
 *.exp
 
-# Ship only the tested VCP shim; experimental helpers and vendor drivers stay out.
+# Ship only the tested VCP shim; no vendor drivers are bundled.
 !/dist/ftd2xx.dll
 
 # Local logs and temporary files

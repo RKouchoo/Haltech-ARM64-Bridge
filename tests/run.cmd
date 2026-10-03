@@ -15,6 +15,4 @@ rem Build with build.cmd first: test the actual distributable as well as source.
 if errorlevel 1 exit /b %errorlevel%
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer_tests.ps1"
 if errorlevel 1 exit /b %errorlevel%
-rem The native-helper experiment has its own explicit tests/native.cmd suite.
-rem Default tests verify only the production VCP transport and distributable.
 exit /b %errorlevel%

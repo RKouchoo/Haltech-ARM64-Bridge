@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $folder = 'C:\Program Files (x86)\Haltech\Nexus Software\Haltech NSP'
 $components = @('ftd2xx.dll')
-# Retire only the experimental app-local helper, after preserving it alongside
+# Retire only the legacy app-local helper, after preserving it alongside
 # the old DLL. Restoring that snapshot must still recover the matched pair.
 $retiredComponents = @('haltech-ftdi-arm64.exe')
 $snapshotComponents = $components + $retiredComponents

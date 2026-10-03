@@ -44,8 +44,8 @@ int wmain(int argc, wchar_t **argv)
             ++failures;
         }
     }
-    // The experimental native bridge shares these exports. Check the VCP
-    // version too, so accidentally shipping it cannot pass the release test.
+    // Check the VCP version as well as its exports, so an unrelated D2XX DLL
+    // with matching function names cannot accidentally pass the release test.
     using GetVersion = DWORD(WINAPI *)(LPDWORD);
     FARPROC address = GetProcAddress(library, "FT_GetLibraryVersion");
     GetVersion getVersion = nullptr;
